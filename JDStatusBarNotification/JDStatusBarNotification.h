@@ -91,6 +91,7 @@ typedef JDStatusBarStyle*(^JDPrepareStyleBlock)(JDStatusBarStyle *style);
  *  Calls dismissAnimated: with animated set to YES
  */
 + (void)dismiss;
++ (void)dismissWithCompletion:(void (^ __nullable)(BOOL finished))completion;
 
 /**
  *  Dismisses any currently displayed notification immediately
@@ -99,6 +100,7 @@ typedef JDStatusBarStyle*(^JDPrepareStyleBlock)(JDStatusBarStyle *style);
  *  for presentation will also be used for the dismissal.
  */
 + (void)dismissAnimated:(BOOL)animated;
++ (void)dismissAnimated:(BOOL)animated completion:(void (^ __nullable)(BOOL finished))completion;
 
 /**
  *  Same as dismissAnimated:, but you can specify a delay,
@@ -107,6 +109,8 @@ typedef JDStatusBarStyle*(^JDPrepareStyleBlock)(JDStatusBarStyle *style);
  *  @param delay The delay, how long the notification should stay visible
  */
 + (void)dismissAfter:(NSTimeInterval)delay;
++ (void)dismissAfter:(NSTimeInterval)delay completion:(void (^ __nullable)(BOOL finished))completion;
+
 
 #pragma mark Styles
 
@@ -140,11 +144,28 @@ typedef JDStatusBarStyle*(^JDPrepareStyleBlock)(JDStatusBarStyle *style);
 #pragma mark progress & activity
 
 /**
+ *  Update the label.
+ *
+ *  @param status New message
+ */
++ (void)updateStatus:(NSString*)status;
+
+/**
  *  Show the progress below the label.
  *
  *  @param progress Relative progress from 0.0 to 1.0
+ *  Animation duration defaults to 0.05 with this method
  */
 + (void)showProgress:(CGFloat)progress;
+
+/**
+ *  Show the progress below the label.
+ *
+ *  @param progress Relative progress from 0.0 to 1.0
+ *  @param duration The amount of time the progress bar
+ *  will take animating between cycles
+ */
++ (void)showProgress:(CGFloat)progress withAnimationDuration:(NSTimeInterval)duration;
 
 /**
  *  Shows an activity indicator in front of the notification text
@@ -163,6 +184,12 @@ typedef JDStatusBarStyle*(^JDPrepareStyleBlock)(JDStatusBarStyle *style);
  *  @return YES, if a notification is currently displayed. Otherwise NO.
  */
 + (BOOL)isVisible;
+
+/**
+ * Gives api access to the percentage of how much the
+ * progress view bar has filled up the top bar
+ */
++ (CGFloat)exactPercentageOfProgressView;
 
 @end
 

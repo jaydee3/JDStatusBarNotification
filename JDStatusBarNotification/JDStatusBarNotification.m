@@ -8,7 +8,6 @@
 //
 
 #import <QuartzCore/QuartzCore.h>
-
 #import "JDStatusBarNotification.h"
 
 @interface JDStatusBarStyle (Hidden)
@@ -90,17 +89,32 @@
     [self dismissAnimated:YES];
 }
 
++ (void)dismissWithCompletion:(void (^ __nullable)(BOOL finished))completion;
+{
+    [self dismissAnimated:YES completion:completion];
+}
+
 + (void)dismissAnimated:(BOOL)animated;
 {
-    [[JDStatusBarNotification sharedInstance] dismissAnimated:animated];
+    [[JDStatusBarNotification sharedInstance] dismissAnimated:animated completion:nil];
 }
 
-+ (void)dismissAfter:(NSTimeInterval)delay;
++ (void)dismissAnimated:(BOOL)animated completion:(void (^ __nullable)(BOOL finished))completion
 {
-    [[JDStatusBarNotification sharedInstance] setDismissTimerWithInterval:delay];
+    [[JDStatusBarNotification sharedInstance] dismissAnimated:animated completion:completion];
 }
 
-+ (void)setDefaultStyle:(JDPrepareStyleBlock)prepareBlock;
++ (void)dismissAfter:(NSTimeInterval)delay
+{
+    [[JDStatusBarNotification sharedInstance] setDismissTimerWithInterval:delay completion:nil];
+}
+
++ (void)dismissAfter:(NSTimeInterval)delay completion:(void (^ __nullable)(BOOL finished))completion
+{
+    [[JDStatusBarNotification sharedInstance] setDismissTimerWithInterval:delay completion:completion];
+}
+
++ (void)setDefaultStyle:(JDPrepareStyleBlock)prepareBlock
 {
     NSAssert(prepareBlock != nil, @"No prepareBlock provided");
     
@@ -115,17 +129,27 @@
                                                            prepare:prepareBlock];
 }
 
-+ (void)showProgress:(CGFloat)progress;
++ (void)updateStatus:(NSString*)status
 {
-    [[JDStatusBarNotification sharedInstance] setProgress:progress];
+    [[JDStatusBarNotification sharedInstance] updateStatus:status];
 }
 
-+ (void)showActivityIndicator:(BOOL)show indicatorStyle:(UIActivityIndicatorViewStyle)style;
++ (void)showProgress:(CGFloat)progress
+{
+    [[JDStatusBarNotification sharedInstance] setProgress:progress withAnimationDuration:0.05];
+}
+
++ (void)showProgress:(CGFloat)progress withAnimationDuration:(NSTimeInterval)duration
+{
+    [[JDStatusBarNotification sharedInstance] setProgress:progress withAnimationDuration:duration];
+}
+
++ (void)showActivityIndicator:(BOOL)show indicatorStyle:(UIActivityIndicatorViewStyle)style
 {
     [[JDStatusBarNotification sharedInstance] showActivityIndicator:show indicatorStyle:style];
 }
 
-+ (BOOL)isVisible;
++ (BOOL)isVisible
 {
     return [[JDStatusBarNotification sharedInstance] isVisible];
 }
@@ -153,7 +177,7 @@
 
 #pragma mark Custom styles
 
-- (void)setupDefaultStyles;
+- (void)setupDefaultStyles
 {
     self.defaultStyle = [JDStatusBarStyle defaultStyleWithName:JDStatusBarStyleDefault];
     
@@ -164,7 +188,7 @@
 }
 
 - (NSString*)addStyleNamed:(NSString*)identifier
-                   prepare:(JDPrepareStyleBlock)prepareBlock;
+                   prepare:(JDPrepareStyleBlock)prepareBlock
 {
     NSAssert(identifier != nil, @"No identifier provided");
     NSAssert(prepareBlock != nil, @"No prepareBlock provided");
@@ -177,7 +201,7 @@
 #pragma mark Presentation
 
 - (UIView*)showWithStatus:(NSString *)status
-                styleName:(NSString*)styleName;
+                styleName:(NSString*)styleName
 {
     JDStatusBarStyle *style = nil;
     if (styleName != nil) {
@@ -189,7 +213,7 @@
 }
 
 - (UIView*)showWithStatus:(NSString *)status
-                    style:(JDStatusBarStyle*)style;
+                    style:(JDStatusBarStyle*)style
 {
     // first, check if status bar is visible at all
     if ([UIApplication sharedApplication].statusBarHidden) return nil;
@@ -250,20 +274,20 @@
 
 #pragma mark Dismissal
 
-- (void)setDismissTimerWithInterval:(NSTimeInterval)interval;
+- (void)setDismissTimerWithInterval:(NSTimeInterval)interval completion:(void (^ __nullable)(BOOL finished))completion
 {
     [self.dismissTimer invalidate];
     self.dismissTimer = [[NSTimer alloc] initWithFireDate:[NSDate dateWithTimeIntervalSinceNow:interval]
-                                                 interval:0 target:self selector:@selector(dismiss:) userInfo:nil repeats:NO];
+                                                 interval:0 target:self selector:@selector(dismiss:) userInfo:completion repeats:NO];
     [[NSRunLoop currentRunLoop] addTimer:self.dismissTimer forMode:NSRunLoopCommonModes];
 }
 
 - (void)dismiss:(NSTimer*)timer;
 {
-    [self dismissAnimated:YES];
+    [self dismissAnimated:YES completion:timer.userInfo];
 }
 
-- (void)dismissAnimated:(BOOL)animated;
+- (void)dismissAnimated:(BOOL)animated completion:(void (^ __nullable)(BOOL finished))completion
 {
     [self.dismissTimer invalidate];
     self.dismissTimer = nil;
@@ -280,6 +304,12 @@
             self.topBar.transform = CGAffineTransformMakeTranslation(0, -self.topBar.frame.size.height);
         }
     } completion:^(BOOL finished) {
+        
+        if (completion)
+        {
+            completion(finished);
+        }
+        
         [self.overlayWindow removeFromSuperview];
         [self.overlayWindow setHidden:YES];
         _overlayWindow.rootViewController = nil;
@@ -335,7 +365,13 @@
 
 #pragma mark Progress & Activity
 
-- (void)setProgress:(CGFloat)progress;
+- (void)updateStatus:(NSString*)status
+{
+    UILabel *textLabel = self.topBar.textLabel;
+    textLabel.text = status;
+}
+
+- (void)setProgress:(CGFloat)progress withAnimationDuration:(NSTimeInterval)duration
 {
     if (_topBar == nil) return;
     
@@ -347,6 +383,14 @@
         return;
     }
     
+    if (CGRectEqualToRect(self.progressView.frame, CGRectZero)) {
+        duration = 0.0;
+    }
+    [self configureProgressViewWithAnimationDuration:duration];
+}
+
+- (void)configureProgressViewWithAnimationDuration:(NSTimeInterval)duration
+{
     // update superview
     if (self.activeStyle.progressBarPosition == JDStatusBarProgressBarPositionBelow ||
         self.activeStyle.progressBarPosition == JDStatusBarProgressBarPositionNavBar) {
@@ -360,7 +404,7 @@
     CGFloat height = MIN(frame.size.height,MAX(0.5, self.activeStyle.progressBarHeight));
     if (height == 20.0 && frame.size.height > height) height = frame.size.height;
     frame.size.height = height;
-    frame.size.width = round(frame.size.width * progress);
+    frame.size.width = round(frame.size.width * self.progress);
     
     // apply y-position from active style
     CGFloat barHeight = self.topBar.bounds.size.height;
@@ -385,10 +429,14 @@
     self.progressView.backgroundColor = self.activeStyle.progressBarColor;
     
     // update progressView frame
-    BOOL animated = !CGRectEqualToRect(self.progressView.frame, CGRectZero);
-    [UIView animateWithDuration:animated ? 0.05 : 0.0 delay:0 options:UIViewAnimationOptionCurveLinear animations:^{
+    [UIView animateWithDuration:duration delay:0 options:UIViewAnimationOptionCurveLinear animations:^{
         self.progressView.frame = frame;
     } completion:nil];
+}
+
++ (CGFloat)exactPercentageOfProgressView
+{
+    return [JDStatusBarNotification sharedInstance].progressView.frame.size.width / [JDStatusBarNotification sharedInstance].topBar.frame.size.width;
 }
 
 - (void)showActivityIndicator:(BOOL)show
@@ -480,25 +528,17 @@
     _topBar.frame = CGRectMake(0, yPos, width, height);
 }
 
-- (void)willChangeStatusBarFrame:(NSNotification*)notification;
+- (void)willChangeStatusBarFrame:(NSNotification*)notification; // called on rotation
 {
-    CGRect newBarFrame = [notification.userInfo[UIApplicationStatusBarFrameUserInfoKey] CGRectValue];
-    NSTimeInterval duration = [[UIApplication sharedApplication] statusBarOrientationAnimationDuration];
+    if (!self.isVisible) {
+        [JDStatusBarNotification dismiss]; // fixes rotation issues (#35 & #60)
+    }
     
-    // update window & statusbar
-    void(^updateBlock)() = ^{
-        [self updateWindowTransform];
-        [self updateTopBarFrameWithStatusBarFrame:newBarFrame];
-        self.progress = self.progress; // // relayout progress bar
-    };
+    [self updateWindowTransform];
+    [self updateTopBarFrameWithStatusBarFrame:[notification.userInfo[UIApplicationStatusBarFrameUserInfoKey] CGRectValue]];
     
-    [UIView animateWithDuration:duration animations:^{
-        updateBlock();
-    } completion:^(BOOL finished) {
-        // this hack fixes a broken frame after the rotation (#35)
-        // but rotation animation is still broken
-        updateBlock();
-    }];
+    // configure progress view on rotation
+    [self configureProgressViewWithAnimationDuration:0.0];
 }
 
 @end
